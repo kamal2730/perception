@@ -1,4 +1,5 @@
-graph TD
+```mermaid
+flowchart TD
     Input[Sensor Input] --> PreProc[Preprocessing]
     PreProc --> RGB_Branch[RGB Processing Branch]
     PreProc --> PCL_Branch[Point Cloud Branch]
@@ -17,3 +18,4 @@ graph TD
     Fusion --> BB[Bounding Box Computation]
     BB --> Pose[Pose Estimation]
     Pose --> Output[Final Output]
+```
