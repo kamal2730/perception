@@ -1,4 +1,5 @@
 #include "pcs/pcs_node.hpp"
+#include <pcl/filters/statistical_outlier_removal.h>
 
 PcsNode::PcsNode() : Node("pcs_node")
 {
@@ -12,7 +13,7 @@ PcsNode::PcsNode() : Node("pcs_node")
     object_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
         "/objects/points", 10);
 
-    RCLCPP_INFO(this->get_logger(), "PCS Node with Full-Res Objects started");
+    RCLCPP_INFO(this->get_logger(), "PCS Node with Full-Res Objects + SOR started");
 }
 
 void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -73,6 +74,16 @@ void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
         }
     }
 
+    // --- Apply Statistical Outlier Removal to object points ---
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr objectCloudClean(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+    sor.setInputCloud(objectCloud);
+    sor.setMeanK(50);           // number of neighbors to analyze
+    sor.setStddevMulThresh(1.0); // threshold multiplier
+    sor.filter(*objectCloudClean);
+
+    RCLCPP_INFO(this->get_logger(), "Cleaned object cloud has %lu points", objectCloudClean->size());
+
     // Convert to ROS2 messages and publish
     sensor_msgs::msg::PointCloud2 plane_msg;
     pcl::toROSMsg(*planeCloud, plane_msg);
@@ -80,12 +91,12 @@ void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
     plane_publisher_->publish(plane_msg);
 
     sensor_msgs::msg::PointCloud2 object_msg;
-    pcl::toROSMsg(*objectCloud, object_msg);
+    pcl::toROSMsg(*objectCloudClean, object_msg);
     object_msg.header = msg->header;
     object_publisher_->publish(object_msg);
 
     RCLCPP_INFO(this->get_logger(), "Published plane (%lu pts) and objects (%lu pts)",
-                planeCloud->size(), objectCloud->size());
+                planeCloud->size(), objectCloudClean->size());
 }
 
 int main(int argc, char **argv)
