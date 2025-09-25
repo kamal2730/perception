@@ -6,35 +6,86 @@ PcsNode::PcsNode() : Node("pcs_node")
         "/zed/zed_node/point_cloud/cloud_registered", 10,
         std::bind(&PcsNode::pointcloudCallback, this, std::placeholders::_1));
 
-    publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        "/filtered/points", 10);
+    plane_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "/plane/points", 10);
 
-    RCLCPP_INFO(this->get_logger(), "PCS Node with VoxelGrid Filter (RGB) started");
+    object_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
+        "/objects/points", 10);
+
+    RCLCPP_INFO(this->get_logger(), "PCS Node with Full-Res Objects started");
 }
 
 void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
-    // Convert ROS2 PointCloud2 -> PCL PointCloud with RGB
+    // Convert ROS2 -> PCL PointCloud with RGB
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
     pcl::fromROSMsg(*msg, *cloud);
-
     RCLCPP_INFO(this->get_logger(), "Received cloud with %lu points", cloud->size());
 
-    // Apply VoxelGrid filter
+    // Downsample cloud for plane segmentation only
     pcl::VoxelGrid<pcl::PointXYZRGB> voxel;
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>());
     voxel.setInputCloud(cloud);
     voxel.setLeafSize(0.01f, 0.01f, 0.01f);  // adjust resolution
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr filtered(new pcl::PointCloud<pcl::PointXYZRGB>());
-    voxel.filter(*filtered);
+    voxel.filter(*cloud_downsampled);
+    RCLCPP_INFO(this->get_logger(), "Downsampled cloud has %lu points", cloud_downsampled->size());
 
-    RCLCPP_INFO(this->get_logger(), "Filtered cloud has %lu points", filtered->size());
+    // --- RANSAC Plane Segmentation on downsampled cloud ---
+    pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+    pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients());
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setDistanceThreshold(0.01);  // adjust tolerance
+    seg.setInputCloud(cloud_downsampled);
+    seg.segment(*inliers, *coefficients);
 
-    // Convert PCL -> ROS2 PointCloud2
-    sensor_msgs::msg::PointCloud2 output_msg;
-    pcl::toROSMsg(*filtered, output_msg);
-    output_msg.header = msg->header;
+    if (inliers->indices.size() == 0)
+    {
+        RCLCPP_WARN(this->get_logger(), "No plane found in the cloud.");
+        return;
+    }
 
-    publisher_->publish(output_msg);
+    RCLCPP_INFO(this->get_logger(), "Plane detected with %lu inliers", inliers->indices.size());
+
+    // --- Extract plane and object from ORIGINAL cloud using plane equation ---
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr planeCloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr objectCloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+
+    float a = coefficients->values[0];
+    float b = coefficients->values[1];
+    float c = coefficients->values[2];
+    float d = coefficients->values[3];
+
+    for (auto &p : cloud->points)
+    {
+        float dist = std::abs(a*p.x + b*p.y + c*p.z + d) / std::sqrt(a*a + b*b + c*c);
+        if (dist <= 0.01) // plane threshold same as RANSAC
+        {
+            pcl::PointXYZRGB pt = p;
+            pt.r = 255; pt.g = 255; pt.b = 255; // color plane white
+            planeCloud->points.push_back(pt);
+        }
+        else
+        {
+            objectCloud->points.push_back(p);
+        }
+    }
+
+    // Convert to ROS2 messages and publish
+    sensor_msgs::msg::PointCloud2 plane_msg;
+    pcl::toROSMsg(*planeCloud, plane_msg);
+    plane_msg.header = msg->header;
+    plane_publisher_->publish(plane_msg);
+
+    sensor_msgs::msg::PointCloud2 object_msg;
+    pcl::toROSMsg(*objectCloud, object_msg);
+    object_msg.header = msg->header;
+    object_publisher_->publish(object_msg);
+
+    RCLCPP_INFO(this->get_logger(), "Published plane (%lu pts) and objects (%lu pts)",
+                planeCloud->size(), objectCloud->size());
 }
 
 int main(int argc, char **argv)

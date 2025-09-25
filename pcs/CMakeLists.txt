@@ -19,7 +19,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(PCL REQUIRED COMPONENTS common filters)
+find_package(PCL REQUIRED COMPONENTS common filters segmentation)
 
 
 # Add executable
