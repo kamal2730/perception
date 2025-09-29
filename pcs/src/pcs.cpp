@@ -38,7 +38,7 @@ void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setDistanceThreshold(0.01);  // adjust tolerance
+    seg.setDistanceThreshold(0.008);  // adjust tolerance
     seg.setInputCloud(cloud_downsampled);
     seg.segment(*inliers, *coefficients);
 
