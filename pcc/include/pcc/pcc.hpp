@@ -10,6 +10,8 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/search/kdtree.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/common/common.h>
 
 class ObjectClusterNode : public rclcpp::Node
 {

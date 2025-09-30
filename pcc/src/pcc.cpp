@@ -9,23 +9,23 @@ ObjectClusterNode::ObjectClusterNode() : Node("object_cluster_node")
         std::bind(&ObjectClusterNode::pointCloudCallback, this, std::placeholders::_1));
 
     cluster_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        "/objects/clusters_colored", 10);
+        "/objects/clusters", 10);
 
     marker_publisher_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
         "/objects/bounding_boxes", 10);
 
-    RCLCPP_INFO(this->get_logger(), "Object Clustering Node with Bounding Boxes Started");
+    RCLCPP_INFO(this->get_logger(), "Object Clustering Node Started");
 }
 
 void ObjectClusterNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
     // Convert ROS2 -> PCL
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>());
     pcl::fromROSMsg(*msg, *cloud);
     RCLCPP_INFO(this->get_logger(), "Received cloud with %lu points", cloud->size());
 
-    // --- Remove NaN / Inf points ---
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZRGB>());
+    // Remove NaN / Inf points
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_filtered(new pcl::PointCloud<pcl::PointXYZ>());
     for (auto &pt : cloud->points)
         if (pcl::isFinite(pt))
             cloud_filtered->points.push_back(pt);
@@ -33,61 +33,40 @@ void ObjectClusterNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::
     cloud_filtered->height = 1;
     cloud_filtered->is_dense = true;
 
-    // --- Downsample ---
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZRGB>());
-    pcl::VoxelGrid<pcl::PointXYZRGB> vg;
+    // Downsample
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_downsampled(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::VoxelGrid<pcl::PointXYZ> vg;
     vg.setInputCloud(cloud_filtered);
-    vg.setLeafSize(0.005f, 0.005f, 0.005f);
+    vg.setLeafSize(0.004f, 0.004f, 0.004f); // smaller leaf for small objects
     vg.filter(*cloud_downsampled);
 
-    // --- Euclidean Clustering ---
-    pcl::search::KdTree<pcl::PointXYZRGB>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZRGB>());
+    // Euclidean Clustering
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>());
     tree->setInputCloud(cloud_downsampled);
 
     std::vector<pcl::PointIndices> cluster_indices;
-    pcl::EuclideanClusterExtraction<pcl::PointXYZRGB> ec;
-    ec.setClusterTolerance(0.02);
-    ec.setMinClusterSize(50);
-    ec.setMaxClusterSize(25000);
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance(0.015); // tighter tolerance for small objects
+    ec.setMinClusterSize(20);      // catch small objects
+    ec.setMaxClusterSize(1000);   // ignore very big clusters
     ec.setSearchMethod(tree);
     ec.setInputCloud(cloud_downsampled);
     ec.extract(cluster_indices);
 
-    // --- Assign colors & bounding boxes ---
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_colored(new pcl::PointCloud<pcl::PointXYZRGB>());
     visualization_msgs::msg::MarkerArray marker_array;
 
     int cluster_id = 0;
-    std::vector<uint8_t> colors = {255, 0, 0,   // red
-                                   0, 255, 0,   // green
-                                   0, 0, 255,   // blue
-                                   255, 255, 0, // yellow
-                                   255, 0, 255, // magenta
-                                   0, 255, 255};// cyan
-
     for (auto &indices : cluster_indices)
     {
-        // Color points
-        uint8_t r = colors[(cluster_id*3)%colors.size()];
-        uint8_t g = colors[(cluster_id*3+1)%colors.size()];
-        uint8_t b = colors[(cluster_id*3+2)%colors.size()];
-
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZRGB>());
+        pcl::PointCloud<pcl::PointXYZ>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZ>());
         for (auto &idx : indices.indices)
-        {
-            pcl::PointXYZRGB pt = cloud_downsampled->points[idx];
-            pt.r = r;
-            pt.g = g;
-            pt.b = b;
-            cloud_colored->points.push_back(pt);
-            cluster->points.push_back(pt);
-        }
+            cluster->points.push_back(cloud_downsampled->points[idx]);
 
         cluster->width = cluster->points.size();
         cluster->height = 1;
 
-        // --- Compute bounding box ---
-        pcl::PointXYZRGB min_pt, max_pt;
+        // Bounding box
+        pcl::PointXYZ min_pt, max_pt;
         pcl::getMinMax3D(*cluster, min_pt, max_pt);
 
         visualization_msgs::msg::Marker marker;
@@ -106,9 +85,10 @@ void ObjectClusterNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::
         marker.pose.orientation.z = 0.0;
         marker.pose.orientation.w = 1.0;
 
-        marker.scale.x = (max_pt.x - min_pt.x);
-        marker.scale.y = (max_pt.y - min_pt.y);
-        marker.scale.z = (max_pt.z - min_pt.z);
+        // Increase bounding box size slightly
+        marker.scale.x = (max_pt.x - min_pt.x) * 1.2f;
+        marker.scale.y = (max_pt.y - min_pt.y) * 1.2f;
+        marker.scale.z = (max_pt.z - min_pt.z) * 1.2f;
 
         marker.color.r = 1.0f;
         marker.color.g = 0.0f;
@@ -116,25 +96,13 @@ void ObjectClusterNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::
         marker.color.a = 0.5f;
 
         marker_array.markers.push_back(marker);
-
         cluster_id++;
     }
-
-    // Prepare cloud
-    cloud_colored->width = cloud_colored->points.size();
-    cloud_colored->height = 1;
-    cloud_colored->is_dense = true;
-
-    // Publish colored clusters
-    sensor_msgs::msg::PointCloud2 output_msg;
-    pcl::toROSMsg(*cloud_colored, output_msg);
-    output_msg.header = msg->header;
-    cluster_publisher_->publish(output_msg);
 
     // Publish bounding boxes
     marker_publisher_->publish(marker_array);
 
-    RCLCPP_INFO(this->get_logger(), "Published %lu clusters with bounding boxes", cluster_indices.size());
+    RCLCPP_INFO(this->get_logger(), "Published %lu clusters", cluster_indices.size());
 }
 
 int main(int argc, char **argv)
