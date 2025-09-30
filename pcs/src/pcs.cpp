@@ -38,7 +38,7 @@ void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
     seg.setOptimizeCoefficients(true);
     seg.setModelType(pcl::SACMODEL_PLANE);
     seg.setMethodType(pcl::SAC_RANSAC);
-    seg.setDistanceThreshold(0.008);  // adjust tolerance
+    seg.setDistanceThreshold(0.005);  // adjust tolerance
     seg.setInputCloud(cloud_downsampled);
     seg.segment(*inliers, *coefficients);
 
@@ -62,7 +62,7 @@ void PcsNode::pointcloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr 
     for (auto &p : cloud->points)
     {
         float dist = std::abs(a*p.x + b*p.y + c*p.z + d) / std::sqrt(a*a + b*b + c*c);
-        if (dist <= 0.01) // plane threshold same as RANSAC
+        if (dist <= 0.005) // plane threshold same as RANSAC
         {
             pcl::PointXYZRGB pt = p;
             pt.r = 255; pt.g = 255; pt.b = 255; // color plane white
