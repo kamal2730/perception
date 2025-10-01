@@ -9,32 +9,40 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
-find_package(PCL REQUIRED)
+find_package(pcl_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
-find_package(sensor_msgs REQUIRED)
 
+# Generate custom messages
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PointCloud2Array.msg"
   DEPENDENCIES sensor_msgs
 )
 
-include_directories(
-  include
-  ${PCL_INCLUDE_DIRS}
-)
+# Include your headers
+include_directories(include)
 
-add_executable(pcc src/pcc.cpp)
-ament_target_dependencies(pcc
+# Create executable
+add_executable(pcc_node src/pcc.cpp)
+
+# Link ROS2 dependencies
+ament_target_dependencies(pcc_node
   rclcpp
   sensor_msgs
   pcl_conversions
+  pcl_ros
   visualization_msgs
 )
-target_link_libraries(pcc ${PCL_LIBRARIES})
 
+# Link generated messages
+rosidl_target_interfaces(pcc_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+# Install
 install(TARGETS
-  pcc
-  DESTINATION lib/${PROJECT_NAME})
+  pcc_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 ament_package()
