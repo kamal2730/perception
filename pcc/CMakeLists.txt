@@ -11,7 +11,13 @@ find_package(sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/PointCloud2Array.msg"
+  DEPENDENCIES sensor_msgs
+)
 
 include_directories(
   include

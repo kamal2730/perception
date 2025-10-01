@@ -13,6 +13,9 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/common/common.h>
 
+// Custom message for array of clouds
+#include "pcc/msg/point_cloud2_array.hpp"
+
 class ObjectClusterNode : public rclcpp::Node
 {
 public:
@@ -22,7 +25,8 @@ private:
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr subscription_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cluster_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cluster_publisher_;   // old topic
+    rclcpp::Publisher<pcc::msg::PointCloud2Array>::SharedPtr cluster_array_publisher_; // new topic
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_publisher_;
 };
 
