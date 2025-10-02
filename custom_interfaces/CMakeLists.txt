@@ -24,6 +24,8 @@ find_package(sensor_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PcDetection.msg"
   "msg/PcDetectionArray.msg"
+  "msg/RgbObject.msg"
+  "msg/RgbDetection.msg"
   DEPENDENCIES sensor_msgs
 )
 
