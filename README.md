@@ -2,7 +2,7 @@
 - [x] Custom message for PC DET
 - [x] Custom message for RGB DET
 - [ ] PC DET NODE
-- [ ] RGB DET NODE
+- [x] RGB DET NODE
 - [ ] FUSING NODE
 ---
 ```mermaid
