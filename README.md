@@ -1,3 +1,10 @@
+# To DO
+- [ ] Custom message for PC DET
+- [ ] Custom message for RGB DET
+- [ ] PC DET NODE
+- [ ] RGB DET NODE
+- [ ] FUSING NODE
+---
 ```mermaid
 flowchart TD
     Input[Sensor Input] --> PreProc[Preprocessing]
