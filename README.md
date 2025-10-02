@@ -1,5 +1,5 @@
 # To DO
-- [ ] Custom message for PC DET
+- [x] Custom message for PC DET
 - [ ] Custom message for RGB DET
 - [ ] PC DET NODE
 - [ ] RGB DET NODE
