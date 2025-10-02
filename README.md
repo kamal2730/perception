@@ -1,6 +1,6 @@
 # To DO
 - [x] Custom message for PC DET
-- [ ] Custom message for RGB DET
+- [x] Custom message for RGB DET
 - [ ] PC DET NODE
 - [ ] RGB DET NODE
 - [ ] FUSING NODE
