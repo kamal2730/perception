@@ -4,6 +4,7 @@
 - [ ] PC DET NODE
 - [x] RGB DET NODE
 - [ ] FUSING NODE
+- [ ] 6DOF
 ---
 ```mermaid
 flowchart TD
