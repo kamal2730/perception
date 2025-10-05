@@ -1,9 +1,11 @@
 # To DO
 - [x] Custom message for PC DET
 - [x] Custom message for RGB DET
+- [ ] modify pcc to publish clusters in Custom msg
 - [ ] PC DET NODE
-- [ ] RGB DET NODE
+- [x] RGB DET NODE
 - [ ] FUSING NODE
+- [ ] 6DOF
 ---
 ```mermaid
 flowchart TD
