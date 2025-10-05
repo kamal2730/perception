@@ -39,7 +39,7 @@ void PcdFpfhNode::computeFPFH(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
 
     ne.setInputCloud(cloud);
     ne.setSearchMethod(tree);
-    ne.setRadiusSearch(0.02);
+    ne.setRadiusSearch(0.02);  // adjust radius for your dataset
     ne.compute(*normals);
 
     // Compute FPFH
@@ -47,7 +47,7 @@ void PcdFpfhNode::computeFPFH(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud,
     fpfh_est.setInputCloud(cloud);
     fpfh_est.setInputNormals(normals);
     fpfh_est.setSearchMethod(tree);
-    fpfh_est.setRadiusSearch(0.05);
+    fpfh_est.setRadiusSearch(0.05);  // adjust radius for your dataset
     fpfh_est.compute(*fpfh);
 }
 
@@ -58,25 +58,33 @@ float PcdFpfhNode::compareFPFH(pcl::PointCloud<pcl::FPFHSignature33>::Ptr f1,
     hist1.setZero();
     hist2.setZero();
 
+    // Average histograms
     for (auto &pt : f1->points)
         for (int i = 0; i < 33; ++i)
             hist1[i] += pt.histogram[i];
-    hist1 /= f1->points.size();
+    if (!f1->points.empty())
+        hist1 /= f1->points.size();
 
     for (auto &pt : f2->points)
         for (int i = 0; i < 33; ++i)
             hist2[i] += pt.histogram[i];
-    hist2 /= f2->points.size();
+    if (!f2->points.empty())
+        hist2 /= f2->points.size();
 
-    return (hist1 - hist2).norm();
+    // Cosine similarity (range 0–1, higher = more similar)
+    float denom = hist1.norm() * hist2.norm();
+    if (denom == 0.0f)
+        return 0.0f;
+    return hist1.dot(hist2) / denom;
 }
 
 void PcdFpfhNode::clusterCallback(const pcc::msg::PointCloud2Array::SharedPtr msg)
 {
     custom_interfaces::msg::PcDetectionArray detections;
     int similar_count = 0;
-    const float similarity_threshold = 0.5f; // tweak this
+    const float similarity_threshold = 0.001f; // cosine similarity threshold
 
+    int cluster_idx = 1;
     for (auto &cloud_msg : msg->clouds)
     {
         pcl::PointCloud<pcl::PointXYZ>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZ>());
@@ -87,15 +95,18 @@ void PcdFpfhNode::clusterCallback(const pcc::msg::PointCloud2Array::SharedPtr ms
 
         float similarity = compareFPFH(model_fpfh_, cluster_fpfh);
 
-        if (similarity < similarity_threshold)
+        if (similarity >= similarity_threshold)
             similar_count++;
 
         custom_interfaces::msg::PcDetection det;
         det.name = "model_object";
-        det.probability = 1.0f / (1.0f + similarity);
+        det.probability = similarity;  // directly use similarity as probability
         det.cloud = cloud_msg;
 
+        RCLCPP_INFO(this->get_logger(), "Cluster %d → similarity: %.3f", cluster_idx, similarity);
         detections.pc_detections.push_back(det);
+
+        cluster_idx++;
     }
 
     pub_->publish(detections);
