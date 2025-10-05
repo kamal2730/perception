@@ -8,6 +8,12 @@
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>pcl_conversions</depend>
+  <depend>pcc</depend>                <!-- your cluster array package -->
+  <depend>custom_interfaces</depend>  <!-- for PcDetectionArray -->
+  <depend>pcl_msgs</depend>           <!-- optional if needed -->
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

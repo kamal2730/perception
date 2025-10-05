@@ -17,11 +17,30 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(PCL REQUIRED)
+find_package(pcc REQUIRED)
+find_package(custom_interfaces REQUIRED)
+
+include_directories(
+  include
+  ${PCL_INCLUDE_DIRS}
+)
 
 add_executable(pcd_fpfh src/pcd_fpfh.cpp)
+ament_target_dependencies(pcd_fpfh
+  rclcpp
+  sensor_msgs
+  pcl_conversions
+  PCL
+  pcc
+  custom_interfaces
+)
+
+target_link_libraries(pcd_fpfh ${PCL_LIBRARIES})
+
 target_include_directories(pcd_fpfh PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
