@@ -1,11 +1,15 @@
 # To DO
 - [x] Custom message for PC DET
 - [x] Custom message for RGB DET
-- [ ] modify pcc to publish clusters in Custom msg
-- [ ] PC DET NODE
+- [ ] modify perception to publish clusters in Custom msg
+- [ ] py script to visualize clusters
+- [ ] remove plane
+- [ ] publish tf2 for each cluster Eigen Vectors + normal estimation(plane)
 - [x] RGB DET NODE
-- [ ] FUSING NODE
+- [x] FUSING NODE
+- [ ] RGB DET NODE (migrate -> client)
 - [ ] 6DOF
+- [ ] Testing on real feed
 ---
 ```mermaid
 flowchart TD
