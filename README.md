@@ -3,7 +3,7 @@
 - [x] Custom message for RGB DET
 - [x] modify perception to publish clusters in Custom msg
 - [x] node to visualize clusters
-- [ ] remove plane
+- [x] remove plane
 - [ ] publish tf2 for each cluster Eigen Vectors + normal estimation(plane)
 - [x] RGB DET NODE
 - [x] FUSING NODE

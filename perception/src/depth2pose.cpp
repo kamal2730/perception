@@ -13,7 +13,7 @@ Depth2PoseNode::Depth2PoseNode() : Node("depth2pose")
     cluster_pub_ = this->create_publisher<perception::msg::PointCloud2Array>("/objects/cluster_array", 10);
     marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/objects/bounding_boxes", 10);
 
-    RCLCPP_INFO(this->get_logger(), "Depth2Pose Node Started (2D->3D Fusion)");
+    RCLCPP_INFO(this->get_logger(), "Depth2Pose Node Started with per-cluster plane removal");
 }
 
 void Depth2PoseNode::detectionCallback(custom_interfaces::msg::RgbDetection::SharedPtr msg)
@@ -44,6 +44,7 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZRGB>());
 
+        // Extract 3D points inside bounding box
         for (int v = y_min; v < y_min + height; v++) {
             for (int u = x_min; u < x_min + width; u++) {
                 int idx = v * msg->width + u;
@@ -56,20 +57,51 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
 
         if (cluster->empty()) continue;
 
+        // --- Remove supporting plane per cluster ---
+        pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+        seg.setOptimizeCoefficients(true);
+        seg.setModelType(pcl::SACMODEL_PLANE);
+        seg.setMethodType(pcl::SAC_RANSAC);
+        seg.setDistanceThreshold(0.005);
+        seg.setInputCloud(cluster);
+
+        pcl::PointIndices::Ptr plane_inliers(new pcl::PointIndices());
+        pcl::ModelCoefficients::Ptr plane_coeff(new pcl::ModelCoefficients());
+        seg.segment(*plane_inliers, *plane_coeff);
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_only(new pcl::PointCloud<pcl::PointXYZRGB>());
+        if (!plane_inliers->indices.empty()) {
+            pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+            extract.setInputCloud(cluster);
+            extract.setIndices(plane_inliers);
+            extract.setNegative(true);  // remove plane
+            extract.filter(*object_only);
+        } else {
+            object_only = cluster;
+        }
+
+        // --- Clean noise ---
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_clean(new pcl::PointCloud<pcl::PointXYZRGB>());
         pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
-        sor.setInputCloud(cluster);
+        sor.setInputCloud(object_only);
         sor.setMeanK(20);
         sor.setStddevMulThresh(1.0);
         sor.filter(*cluster_clean);
 
         if (cluster_clean->empty()) continue;
 
+        // Store plane normal for 6DoF later
+        Eigen::Vector3f plane_normal(0,0,0);
+        if (plane_coeff->values.size() >= 3)
+            plane_normal = Eigen::Vector3f(plane_coeff->values[0], plane_coeff->values[1], plane_coeff->values[2]);
+
+        // --- Convert to ROS2 message ---
         sensor_msgs::msg::PointCloud2 cluster_msg;
         pcl::toROSMsg(*cluster_clean, cluster_msg);
         cluster_msg.header = msg->header;
         cluster_array_msg.clouds.push_back(cluster_msg);
 
+        // --- Create visualization marker ---
         pcl::PointXYZRGB min_pt, max_pt;
         pcl::getMinMax3D(*cluster_clean, min_pt, max_pt);
 
