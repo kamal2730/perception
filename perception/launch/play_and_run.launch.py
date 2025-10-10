@@ -26,4 +26,8 @@ def generate_launch_description():
             cmd=['ros2', 'run', 'perception', 'depth2pose_node'],
             output='screen'
         ),
+        ExecuteProcess(
+            cmd=['ros2', 'run', 'perception', 'cluster_merger_node'],
+            output='screen'
+        ),
     ])
