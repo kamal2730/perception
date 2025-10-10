@@ -14,6 +14,7 @@ find_package(visualization_msgs REQUIRED)
 find_package(custom_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(PCL REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PointCloud2Array.msg"
@@ -34,6 +35,7 @@ ament_target_dependencies(depth2pose_node
   pcl_ros
   visualization_msgs
   custom_interfaces
+  geometry_msgs
 )
 
 target_link_libraries(depth2pose_node ${PCL_LIBRARIES})

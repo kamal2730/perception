@@ -4,24 +4,20 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
+#include <geometry_msgs/msg/pose.hpp>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/common/common.h>
+#include <pcl/common/pca.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
 
 #include "custom_interfaces/msg/rgb_detection.hpp"
 #include "perception/msg/point_cloud2_array.hpp"
-
-struct ClusterInfo
-{
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud;
-    pcl::ModelCoefficients::Ptr plane_coeff;  // plane coefficients for 6DoF later
-    Eigen::Vector3f plane_normal;             // plane normal vector
-};
 
 class Depth2PoseNode : public rclcpp::Node
 {
@@ -37,6 +33,7 @@ private:
 
     rclcpp::Publisher<perception::msg::PointCloud2Array>::SharedPtr cluster_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr pose_pub_;
 
     custom_interfaces::msg::RgbDetection::SharedPtr latest_detection_;
 };
