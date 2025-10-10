@@ -42,8 +42,25 @@ rosidl_target_interfaces(depth2pose_node
   ${PROJECT_NAME} "rosidl_typesupport_cpp"
 )
 
+add_executable(cluster_merger_node src/merge_clusters.cpp)
+
+ament_target_dependencies(cluster_merger_node
+  rclcpp
+  sensor_msgs
+  pcl_conversions
+  pcl_ros 
+)
+
+target_link_libraries(cluster_merger_node ${PCL_LIBRARIES})
+
+rosidl_target_interfaces(cluster_merger_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+
 install(TARGETS
   depth2pose_node
+  cluster_merger_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
