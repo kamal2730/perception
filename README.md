@@ -4,10 +4,12 @@
 - [x] modify perception to publish clusters in Custom msg
 - [x] node to visualize clusters
 - [x] remove plane
-- [ ] publish tf2 for each cluster Eigen Vectors + normal estimation(plane)
+- [x] publish pose for each cluster Eigen Vectors + normal estimation(plane)
 - [x] RGB DET NODE
 - [x] FUSING NODE
 - [ ] RGB DET NODE (migrate -> client)
+- [ ] Integrating RGB server to perception
+- [ ] Publish tf2
 - [ ] 6DOF
 - [ ] Testing on real feed
 ---
