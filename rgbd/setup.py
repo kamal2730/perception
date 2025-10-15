@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'rgbd = rgbd.rgbd:main'
+            ,'dv=rgbd.dv:main'
         ],
     },
 )

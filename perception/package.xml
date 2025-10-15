@@ -18,6 +18,8 @@
   <depend>visualization_msgs</depend>
   <depend>custom_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>opencv</depend>
 
   <buildtool_depend>rosidl_default_generators</buildtool_depend>
   <exec_depend>rosidl_default_runtime</exec_depend>

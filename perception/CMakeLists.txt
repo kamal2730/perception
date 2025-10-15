@@ -15,6 +15,9 @@ find_package(custom_interfaces REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(PCL REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(OpenCV REQUIRED)
+find_package(cv_bridge REQUIRED)
+
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PointCloud2Array.msg"
@@ -59,10 +62,26 @@ rosidl_target_interfaces(cluster_merger_node
   ${PROJECT_NAME} "rosidl_typesupport_cpp"
 )
 
+add_executable(detection_visualizer_node src/detection_visualizer.cpp)
+
+ament_target_dependencies(detection_visualizer_node
+  rclcpp
+  sensor_msgs
+  custom_interfaces
+  cv_bridge
+  OpenCV
+)
+
+rosidl_target_interfaces(detection_visualizer_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp"
+)
+
+
 
 install(TARGETS
   depth2pose_node
   cluster_merger_node
+  detection_visualizer_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

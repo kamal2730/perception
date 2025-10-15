@@ -143,6 +143,11 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
         pose.orientation.z = q.z();
         pose.orientation.w = q.w();
 
+        if (!std::isfinite(pose.position.x) || !std::isfinite(pose.position.y) || !std::isfinite(pose.position.z) ||
+            !std::isfinite(pose.orientation.x) || !std::isfinite(pose.orientation.y) ||
+            !std::isfinite(pose.orientation.z) || !std::isfinite(pose.orientation.w)) continue;
+
+
         pose_array.poses.push_back(pose);
 
         // --- Convert cluster to ROS msg ---
