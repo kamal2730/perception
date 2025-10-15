@@ -30,8 +30,18 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
         return;
     }
 
+    if (msg->width == 0 || msg->height == 0) {
+        RCLCPP_WARN(this->get_logger(), "Received empty point cloud, skipping");
+        return;
+    }
+
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
-    pcl::fromROSMsg(*msg, *cloud);
+    try {
+        pcl::fromROSMsg(*msg, *cloud);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to convert point cloud: %s", e.what());
+        return;
+    }
 
     perception::msg::PointCloud2Array cluster_array_msg;
     visualization_msgs::msg::MarkerArray marker_array;
@@ -49,13 +59,15 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
 
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster(new pcl::PointCloud<pcl::PointXYZRGB>());
 
-        // Extract points inside bbox
-        for (int v = y_min; v < y_min + height; v++) {
-            for (int u = x_min; u < x_min + width; u++) {
-                int idx = v * msg->width + u;
-                if (idx >= cloud->points.size()) continue;
-                auto &pt = cloud->points[idx];
-                if (!pcl::isFinite(pt)) continue;
+        // Extract points inside bbox with bounds checking
+        for (int v = y_min; v < y_min + height && v < static_cast<int>(msg->height); v++) {
+            if (v < 0) continue;
+            for (int u = x_min; u < x_min + width && u < static_cast<int>(msg->width); u++) {
+                if (u < 0) continue;
+                size_t idx = static_cast<size_t>(v) * msg->width + u;
+                if (idx >= cloud->points.size()) break;
+                const auto &pt = cloud->points[idx];
+                if (!pcl::isFinite(pt) || !std::isfinite(pt.x) || !std::isfinite(pt.y) || !std::isfinite(pt.z)) continue;
                 cluster->points.push_back(pt);
             }
         }
@@ -148,16 +160,31 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
         marker.id = cluster_id++;
         marker.type = visualization_msgs::msg::Marker::CUBE;
         marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.pose.position.x = (min_pt.x + max_pt.x)/2.0;
-        marker.pose.position.y = (min_pt.y + max_pt.y)/2.0;
-        marker.pose.position.z = (min_pt.z + max_pt.z)/2.0;
-        marker.scale.x = (max_pt.x - min_pt.x)*1.2f;
-        marker.scale.y = (max_pt.y - min_pt.y)*1.2f;
-        marker.scale.z = (max_pt.z - min_pt.z)*1.2f;
+        // Ensure marker dimensions are valid
+        float center_x = (min_pt.x + max_pt.x)/2.0f;
+        float center_y = (min_pt.y + max_pt.y)/2.0f;
+        float center_z = (min_pt.z + max_pt.z)/2.0f;
+        
+        if (!std::isfinite(center_x) || !std::isfinite(center_y) || !std::isfinite(center_z)) {
+            RCLCPP_WARN(this->get_logger(), "Invalid marker position for cluster %d, skipping", cluster_id);
+            continue;
+        }
+        
+        float scale_x = std::max((max_pt.x - min_pt.x)*1.2f, 0.001f);
+        float scale_y = std::max((max_pt.y - min_pt.y)*1.2f, 0.001f);
+        float scale_z = std::max((max_pt.z - min_pt.z)*1.2f, 0.001f);
+        
+        marker.pose.position.x = center_x;
+        marker.pose.position.y = center_y;
+        marker.pose.position.z = center_z;
+        marker.scale.x = scale_x;
+        marker.scale.y = scale_y;
+        marker.scale.z = scale_z;
         marker.color.r = 1.0f;
         marker.color.g = 0.0f;
         marker.color.b = 0.0f;
         marker.color.a = 0.5f;
+        marker.lifetime = rclcpp::Duration::from_seconds(0.5);  // Markers auto-delete after 0.5 seconds
         marker_array.markers.push_back(marker);
     }
 
