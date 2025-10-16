@@ -14,7 +14,7 @@
 - [ ] Testing on real feed
 ---
 > [!WARNING]
-> While visualizing pose use you'r camera frame to avoid segmentation fault on rviz.
+> While visualizing pose use you'r camera frame as fixed frame to avoid segmentation fault on rviz.
 ---
 ```mermaid
 flowchart TD
