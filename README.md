@@ -13,6 +13,9 @@
 - [ ] 6DOF
 - [ ] Testing on real feed
 ---
+> [!WARNING]
+> While visualizing pose use you'r camera frame to avoid segmentation fault on rviz.
+---
 ```mermaid
 flowchart TD
     Input[Sensor Input] --> PreProc[Preprocessing]
