@@ -7,7 +7,7 @@
 - [x] publish pose for each cluster Eigen Vectors + normal estimation(plane)
 - [x] RGB DET NODE
 - [x] FUSING NODE
-- [ ] RGB DET NODE (migrate -> client)
+- [x] RGB DET NODE (migrate -> client)
 - [ ] Integrating RGB server to perception
 - [ ] Publish tf2
 - [ ] 6DOF
