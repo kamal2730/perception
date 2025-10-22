@@ -22,6 +22,8 @@ setup(
         'console_scripts': [
             'rgbd = rgbd.rgbd:main'
             ,'dv=rgbd.dv:main'
+            ,'rgbd_server=rgbd.rgbd_server:main'
+
         ],
     },
 )
