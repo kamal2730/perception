@@ -26,6 +26,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PcDetectionArray.msg"
   "msg/RgbObject.msg"
   "msg/RgbDetection.msg"
+  "srv/Trigger.srv"
   DEPENDENCIES sensor_msgs
 )
 
