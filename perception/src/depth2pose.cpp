@@ -26,7 +26,7 @@ void Depth2PoseNode::detectionCallback(custom_interfaces::msg::RgbDetection::Sha
 void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
     if (!latest_detection_) {
-        RCLCPP_WARN(this->get_logger(), "No detections yet, skipping pointcloud");
+        // RCLCPP_WARN(this->get_logger(), "No detections yet, skipping pointcloud");
         return;
     }
 
@@ -196,7 +196,7 @@ void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::Sha
     cluster_pub_->publish(cluster_array_msg);
     marker_pub_->publish(marker_array);
     pose_pub_->publish(pose_array);
-
+    if(cluster_array_msg.clouds.size()==0) return;
     RCLCPP_INFO(this->get_logger(), "Published %lu clusters and poses", cluster_array_msg.clouds.size());
 }
 

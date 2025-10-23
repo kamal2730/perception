@@ -25,7 +25,7 @@ void ClusterMergerNode::clusterArrayCallback(const perception::msg::PointCloud2A
 
     if (merged_cloud->empty())
     {
-        RCLCPP_WARN(this->get_logger(), "Merged cloud is empty, skipping publish");
+        // RCLCPP_WARN(this->get_logger(), "Merged cloud is empty, skipping publish");
         return;
     }
 
@@ -36,7 +36,7 @@ void ClusterMergerNode::clusterArrayCallback(const perception::msg::PointCloud2A
 
     merged_pub_->publish(merged_msg);
 
-    RCLCPP_INFO(this->get_logger(), "Published merged cloud with %lu points", merged_cloud->points.size());
+    // RCLCPP_INFO(this->get_logger(), "Published merged cloud with %lu points", merged_cloud->points.size());
 }
 
 int main(int argc, char **argv)
