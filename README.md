@@ -8,7 +8,7 @@
 - [x] RGB DET NODE
 - [x] FUSING NODE
 - [x] RGB DET NODE (migrate -> client)
-- [ ] Integrating RGB server to perception
+- [x] Integrating RGB server to perception
 - [ ] Publish tf2
 - [ ] 6DOF
 - [ ] Testing on real feed

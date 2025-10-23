@@ -8,7 +8,7 @@ Depth2PoseNode::Depth2PoseNode() : Node("depth2pose")
         std::bind(&Depth2PoseNode::pointCloudCallback, this, std::placeholders::_1));
 
     det_sub_ = this->create_subscription<custom_interfaces::msg::RgbDetection>(
-        "/test_detections", 10,
+        "/rgb_detections", 10,
         std::bind(&Depth2PoseNode::detectionCallback, this, std::placeholders::_1));
 
     cluster_pub_ = this->create_publisher<perception::msg::PointCloud2Array>("/objects/cluster_array", 10);
