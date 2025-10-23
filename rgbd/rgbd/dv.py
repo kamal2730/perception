@@ -26,7 +26,7 @@ class DetectionVisualizer(Node):
         # Subscriber to detection topic
         self.detection_subscription = self.create_subscription(
             RgbDetection,
-            '/test_detections',
+            '/rgb_detections',
             self.detection_callback,
             10
         )

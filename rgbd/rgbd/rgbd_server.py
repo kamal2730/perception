@@ -16,7 +16,7 @@ import os
 
 
 class RGBDServer(Node):
-    def __init__(self, model_path, imgsz=640, visualize=False):
+    def __init__(self, model_path, imgsz=640, visualize=False, bbox_scale=1.2):
         super().__init__('rgbd_server')
         self.get_logger().info("Starting RGBD Server Node")
 
@@ -38,6 +38,7 @@ class RGBDServer(Node):
         self.imgsz = imgsz
         self.visualize = visualize
         self.model = YOLO(model_path, task='detect')
+        self.bbox_scale = bbox_scale
         self.get_logger().info(f"Loaded YOLO model from: {model_path}")
 
         self.frame = None
@@ -83,33 +84,68 @@ class RGBDServer(Node):
 
             if run_now and frame is not None:
                 results = self.model(frame, imgsz=self.imgsz)[0]
+                height, width = frame.shape[:2]
 
                 det_msg = RgbDetection()
                 for box, conf, cls in zip(results.boxes.xyxy, results.boxes.conf, results.boxes.cls):
+                    x1, y1, x2, y2 = map(float, box)
+                    box_w = x2 - x1
+                    box_h = y2 - y1
+
+                    # Enlarge the bbox around its center
+                    cx = x1 + box_w / 2
+                    cy = y1 + box_h / 2
+                    new_w = box_w * self.bbox_scale
+                    new_h = box_h * self.bbox_scale
+
+                    new_x1 = int(cx - new_w / 2)
+                    new_y1 = int(cy - new_h / 2)
+                    new_x2 = int(cx + new_w / 2)
+                    new_y2 = int(cy + new_h / 2)
+
+                    # Clamp to image boundaries
+                    new_x1 = max(0, new_x1)
+                    new_y1 = max(0, new_y1)
+                    new_x2 = min(width - 1, new_x2)
+                    new_y2 = min(height - 1, new_y2)
+
                     obj = RgbObject()
                     obj.name = self.model.names[int(cls)]
                     obj.probability = float(conf)
-                    obj.x = float(box[0])
-                    obj.y = float(box[1])
-                    obj.width = float(box[2] - box[0])
-                    obj.height = float(box[3] - box[1])
+                    obj.x = float(new_x1)
+                    obj.y = float(new_y1)
+                    obj.width = float(new_x2 - new_x1)
+                    obj.height = float(new_y2 - new_y1)
                     det_msg.objects.append(obj)
 
                 with self.lock:
                     self.latest_detection = det_msg
 
                 if self.visualize:
-                    annotated = results.plot()
+                    # Draw enlarged boxes for visualization
+                    annotated = frame.copy()
+                    for obj in det_msg.objects:
+                        x1, y1 = int(obj.x), int(obj.y)
+                        x2 = int(obj.x + obj.width)
+                        y2 = int(obj.y + obj.height)
+                        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                        cv2.putText(
+                            annotated,
+                            f"{obj.name} ({obj.probability:.2f})",
+                            (x1, y1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (0, 255, 0),
+                            1
+                        )
                     cv2.imshow("RGBD Detection", annotated)
                     cv2.waitKey(1)
             else:
                 time.sleep(0.01)
 
     def publish_detections(self):
-        msg = None
         with self.lock:
             msg = self.latest_detection
-
         if msg is None:
             self.publisher.publish(RgbDetection())
         else:
@@ -118,7 +154,12 @@ class RGBDServer(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = RGBDServer(os.path.expanduser("~/rgb_det.engine"), imgsz=640, visualize=True)
+    node = RGBDServer(
+        os.path.expanduser("~/rgb_det.engine"),
+        imgsz=640,
+        visualize=True,
+        bbox_scale=1.5  # enlarge boxes by 20%
+    )
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
