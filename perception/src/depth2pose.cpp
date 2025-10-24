@@ -83,6 +83,12 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
         pcl::fromROSMsg(*msg, *cloud);
     } catch (const std::exception& e) {
         RCLCPP_ERROR(this->get_logger(), "Failed to convert point cloud: %s", e.what());
+        callResetTrigger();
+        return;
+    }
+
+    if (cloud->empty()) {
+        RCLCPP_WARN(this->get_logger(), "Converted point cloud is empty, skipping");
         return;
     }
 
@@ -92,6 +98,7 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
     pose_array.header = msg->header;
 
     int cluster_id = 0;
+    bool any_valid_clusters = false;
 
     for (auto &obj : latest_detection_->objects)
     {
@@ -118,63 +125,108 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
         if (cluster->empty()) continue;
 
         // --- Plane removal per cluster ---
-        pcl::SACSegmentation<pcl::PointXYZRGB> seg;
-        seg.setOptimizeCoefficients(true);
-        seg.setModelType(pcl::SACMODEL_PLANE);
-        seg.setMethodType(pcl::SAC_RANSAC);
-        seg.setDistanceThreshold(0.005);
-        seg.setInputCloud(cluster);
-
-        pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
-        pcl::ModelCoefficients::Ptr coeff(new pcl::ModelCoefficients());
-        seg.segment(*inliers, *coeff);
-
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr object_only(new pcl::PointCloud<pcl::PointXYZRGB>());
-        if (!inliers->indices.empty()) {
-            pcl::ExtractIndices<pcl::PointXYZRGB> extract;
-            extract.setInputCloud(cluster);
-            extract.setIndices(inliers);
-            extract.setNegative(true); // remove plane
-            extract.filter(*object_only);
-        } else {
-            object_only = cluster;
+        pcl::ModelCoefficients::Ptr plane_coefficients(new pcl::ModelCoefficients());
+        bool has_plane_coefficients = false;
+
+        try {
+            pcl::SACSegmentation<pcl::PointXYZRGB> seg;
+            seg.setOptimizeCoefficients(true);
+            seg.setModelType(pcl::SACMODEL_PLANE);
+            seg.setMethodType(pcl::SAC_RANSAC);
+            seg.setDistanceThreshold(0.005);
+            seg.setInputCloud(cluster);
+
+            pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+            seg.segment(*inliers, *plane_coefficients);
+
+            if (!inliers->indices.empty()) {
+                pcl::ExtractIndices<pcl::PointXYZRGB> extract;
+                extract.setInputCloud(cluster);
+                extract.setIndices(inliers);
+                extract.setNegative(true); // remove plane
+                extract.filter(*object_only);
+                has_plane_coefficients = (plane_coefficients->values.size() >= 3);
+            } else {
+                object_only = cluster;
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Error in plane segmentation: %s", e.what());
+            callResetTrigger();
+            continue;
         }
+
+        if (object_only->empty()) continue;
 
         // --- Noise removal ---
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr cluster_clean(new pcl::PointCloud<pcl::PointXYZRGB>());
-        pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
-        sor.setInputCloud(object_only);
-        sor.setMeanK(20);
-        sor.setStddevMulThresh(1.0);
-        sor.filter(*cluster_clean);
+        try {
+            pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+            sor.setInputCloud(object_only);
+            sor.setMeanK(20);
+            sor.setStddevMulThresh(1.0);
+            sor.filter(*cluster_clean);
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Error in statistical outlier removal: %s", e.what());
+            callResetTrigger();
+            continue;
+        }
 
         if (cluster_clean->empty()) continue;
 
-        // --- Compute centroid ---
+        // --- Compute centroid and orientation ---
         Eigen::Vector4f centroid;
-        pcl::compute3DCentroid(*cluster_clean, centroid);
+        Eigen::Quaternionf q;
+        
+        try {
+            // Compute centroid
+            if (!pcl::compute3DCentroid(*cluster_clean, centroid)) {
+                RCLCPP_ERROR(this->get_logger(), "Failed to compute centroid for object %d", cluster_id);
+                callResetTrigger();
+                continue;
+            }
 
-        // --- Compute PCA for orientation ---
-        pcl::PCA<pcl::PointXYZRGB> pca;
-        pca.setInputCloud(cluster_clean);
-        Eigen::Vector3f x_axis = pca.getEigenVectors().col(0); // principal direction in plane
+            // Compute PCA for orientation
+            pcl::PCA<pcl::PointXYZRGB> pca;
+            pca.setInputCloud(cluster_clean);
+            
+            if (pca.getEigenVectors().rows() < 3 || pca.getEigenVectors().cols() < 1) {
+                RCLCPP_ERROR(this->get_logger(), "Invalid PCA results for object %d", cluster_id);
+                callResetTrigger();
+                continue;
+            }
+            
+            Eigen::Vector3f x_axis = pca.getEigenVectors().col(0); // principal direction in plane
 
-        // --- Plane normal ---
-        Eigen::Vector3f z_axis(0,0,1);
-        if (coeff->values.size() >= 3)
-            z_axis = Eigen::Vector3f(coeff->values[0], coeff->values[1], coeff->values[2]).normalized();
+            // Plane normal
+            Eigen::Vector3f z_axis(0,0,1);
+            if (has_plane_coefficients) {
+                z_axis = Eigen::Vector3f(plane_coefficients->values[0], 
+                                       plane_coefficients->values[1], 
+                                       plane_coefficients->values[2]).normalized();
+            }
 
-        // --- y-axis perpendicular to plane normal & x-axis ---
-        Eigen::Vector3f y_axis = z_axis.cross(x_axis).normalized();
-        x_axis = y_axis.cross(z_axis).normalized(); // re-orthogonalize
+            // y-axis perpendicular to plane normal & x-axis
+            Eigen::Vector3f y_axis = z_axis.cross(x_axis).normalized();
+            x_axis = y_axis.cross(z_axis).normalized(); // re-orthogonalize
 
-        // --- Build rotation matrix ---
-        Eigen::Matrix3f R;
-        R.col(0) = x_axis;
-        R.col(1) = y_axis;
-        R.col(2) = z_axis;
+            // Build rotation matrix
+            Eigen::Matrix3f R;
+            R.col(0) = x_axis;
+            R.col(1) = y_axis;
+            R.col(2) = z_axis;
 
-        Eigen::Quaternionf q(R);
+            q = Eigen::Quaternionf(R);
+            
+            if (!q.coeffs().allFinite()) {
+                RCLCPP_ERROR(this->get_logger(), "Invalid quaternion computed for object %d", cluster_id);
+                continue;
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Error in pose computation: %s", e.what());
+            callResetTrigger();
+            continue;
+        }
 
         // --- Publish Pose ---
         geometry_msgs::msg::Pose pose;
@@ -188,27 +240,37 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
 
         if (!std::isfinite(pose.position.x) || !std::isfinite(pose.position.y) || !std::isfinite(pose.position.z) ||
             !std::isfinite(pose.orientation.x) || !std::isfinite(pose.orientation.y) ||
-            !std::isfinite(pose.orientation.z) || !std::isfinite(pose.orientation.w)) continue;
-
-
-        pose_array.poses.push_back(pose);
+            !std::isfinite(pose.orientation.z) || !std::isfinite(pose.orientation.w)) {
+            RCLCPP_WARN(this->get_logger(), "Invalid pose values for object %d, skipping", cluster_id);
+            continue;
+        }
 
         // --- Convert cluster to ROS msg ---
         sensor_msgs::msg::PointCloud2 cluster_msg;
-        pcl::toROSMsg(*cluster_clean, cluster_msg);
-        cluster_msg.header = msg->header;
-        cluster_array_msg.clouds.push_back(cluster_msg);
+        try {
+            pcl::toROSMsg(*cluster_clean, cluster_msg);
+            cluster_msg.header = msg->header;
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to convert cluster to ROS message: %s", e.what());
+            continue;
+        }
 
-        // --- Visualization marker ---
+        // --- Compute bounding box ---
         pcl::PointXYZRGB min_pt, max_pt;
-        pcl::getMinMax3D(*cluster_clean, min_pt, max_pt);
-        visualization_msgs::msg::Marker marker;
-        marker.header = msg->header;
-        marker.ns = "clusters";
-        marker.id = cluster_id++;
-        marker.type = visualization_msgs::msg::Marker::CUBE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        // Ensure marker dimensions are valid
+        try {
+            pcl::getMinMax3D(*cluster_clean, min_pt, max_pt);
+            
+            // Verify the computed bounds are valid
+            if (!std::isfinite(min_pt.x) || !std::isfinite(min_pt.y) || !std::isfinite(min_pt.z) ||
+                !std::isfinite(max_pt.x) || !std::isfinite(max_pt.y) || !std::isfinite(max_pt.z)) {
+                RCLCPP_ERROR(this->get_logger(), "Invalid bounding box values for cluster %d", cluster_id);
+                continue;
+            }
+        } catch (const std::exception& e) {
+            RCLCPP_ERROR(this->get_logger(), "Error computing bounding box: %s", e.what());
+            continue;
+        }
+
         float center_x = (min_pt.x + max_pt.x)/2.0f;
         float center_y = (min_pt.y + max_pt.y)/2.0f;
         float center_z = (min_pt.z + max_pt.z)/2.0f;
@@ -221,7 +283,23 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
         float scale_x = std::max((max_pt.x - min_pt.x)*1.2f, 0.001f);
         float scale_y = std::max((max_pt.y - min_pt.y)*1.2f, 0.001f);
         float scale_z = std::max((max_pt.z - min_pt.z)*1.2f, 0.001f);
-        
+
+        if (!std::isfinite(scale_x) || !std::isfinite(scale_y) || !std::isfinite(scale_z)) {
+            RCLCPP_WARN(this->get_logger(), "Invalid marker scale for cluster %d, skipping", cluster_id);
+            continue;
+        }
+
+        // Add to message arrays
+        pose_array.poses.push_back(pose);
+        cluster_array_msg.clouds.push_back(cluster_msg);
+
+        // --- Create visualization marker ---
+        visualization_msgs::msg::Marker marker;
+        marker.header = msg->header;
+        marker.ns = "clusters";
+        marker.id = cluster_id++;
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
         marker.pose.position.x = center_x;
         marker.pose.position.y = center_y;
         marker.pose.position.z = center_z;
@@ -232,15 +310,19 @@ void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::Shar
         marker.color.g = 0.0f;
         marker.color.b = 0.0f;
         marker.color.a = 0.5f;
-        marker.lifetime = rclcpp::Duration::from_seconds(0.5);  // Markers auto-delete after 0.5 seconds
+        marker.lifetime = rclcpp::Duration::from_seconds(0.5);
         marker_array.markers.push_back(marker);
+        
+        any_valid_clusters = true;
     }
 
-    cluster_pub_->publish(cluster_array_msg);
-    marker_pub_->publish(marker_array);
-    pose_pub_->publish(pose_array);
-    if(cluster_array_msg.clouds.size()==0) return;
-    RCLCPP_INFO(this->get_logger(), "Published %lu clusters and poses", cluster_array_msg.clouds.size());
+    // Publish results only if we have valid clusters
+    if (any_valid_clusters) {
+        cluster_pub_->publish(cluster_array_msg);
+        marker_pub_->publish(marker_array);
+        pose_pub_->publish(pose_array);
+        RCLCPP_INFO(this->get_logger(), "Published %lu clusters and poses", cluster_array_msg.clouds.size());
+    }
 }
 
 int main(int argc, char **argv)
