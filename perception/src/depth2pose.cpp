@@ -14,6 +14,8 @@ Depth2PoseNode::Depth2PoseNode() : Node("depth2pose")
     cluster_pub_ = this->create_publisher<perception::msg::PointCloud2Array>("/objects/cluster_array", 10);
     marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/objects/bounding_boxes", 10);
     pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>("/objects/poses", 10);
+    trigger_client_ = this->create_client<custom_interfaces::srv::Trigger>("/rgbd_trigger");
+
 
     RCLCPP_INFO(this->get_logger(), "Depth2Pose Node Started (6DoF enabled)");
 }
@@ -23,7 +25,48 @@ void Depth2PoseNode::detectionCallback(custom_interfaces::msg::RgbDetection::Sha
     latest_detection_ = msg;
 }
 
+void Depth2PoseNode::callResetTrigger()
+{
+    if (!trigger_client_->wait_for_service(std::chrono::seconds(1))) {
+        RCLCPP_WARN(this->get_logger(), "Trigger service not available");
+        return;
+    }
+
+    auto request = std::make_shared<custom_interfaces::srv::Trigger::Request>();
+    request->reset = false;
+
+    auto future = trigger_client_->async_send_request(request);
+
+    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future,
+                                           std::chrono::seconds(1))
+        == rclcpp::FutureReturnCode::SUCCESS) 
+    {
+        RCLCPP_INFO(this->get_logger(), "Trigger service responded successfully");
+    } 
+    else 
+    {
+        RCLCPP_WARN(this->get_logger(), "Trigger service call failed or timed out");
+    }
+}
+
+
 void Depth2PoseNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+{
+    try {
+        processPointCloud(msg);  // call the renamed function
+    }
+    catch (const std::exception &e) {
+        RCLCPP_ERROR(this->get_logger(), "Exception in pointCloudCallback: %s", e.what());
+        callResetTrigger();
+    }
+    catch (...) {
+        RCLCPP_ERROR(this->get_logger(), "Unknown exception in pointCloudCallback");
+        callResetTrigger();
+    }
+}
+
+
+void Depth2PoseNode::processPointCloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
     if (!latest_detection_) {
         // RCLCPP_WARN(this->get_logger(), "No detections yet, skipping pointcloud");

@@ -50,7 +50,7 @@ class DetectionVisualizer(Node):
     def detection_callback(self, msg: RgbDetection):
         """Draw detections on the latest image, display and publish it."""
         if self.latest_image is None:
-            self.get_logger().warn("No image received yet.")
+            # self.get_logger().warn("No image received yet.")
             return
 
         # Make a copy to draw on

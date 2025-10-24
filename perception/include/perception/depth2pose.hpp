@@ -17,6 +17,7 @@
 #include <pcl/filters/extract_indices.h>
 
 #include "custom_interfaces/msg/rgb_detection.hpp"
+#include "custom_interfaces/srv/trigger.hpp"
 #include "perception/msg/point_cloud2_array.hpp"
 
 class Depth2PoseNode : public rclcpp::Node
@@ -27,9 +28,13 @@ public:
 private:
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
     void detectionCallback(const custom_interfaces::msg::RgbDetection::SharedPtr msg);
+    void processPointCloud(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
+    void callResetTrigger();
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pc_sub_;
     rclcpp::Subscription<custom_interfaces::msg::RgbDetection>::SharedPtr det_sub_;
+    rclcpp::Client<custom_interfaces::srv::Trigger>::SharedPtr trigger_client_;
+
 
     rclcpp::Publisher<perception::msg::PointCloud2Array>::SharedPtr cluster_pub_;
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
