@@ -65,11 +65,18 @@ class RGBDServer(Node):
             self.get_logger().error(f"Image conversion error: {e}")
 
     def trigger_callback(self, request, response):
+        response.success = True
+        if request.reset:
+            with self.lock:
+                self.latest_detection = None
+            self.get_logger().info("Trigger received — Resetting")
+            return response
+
         with self.lock:
             self.triggered = True
         self.get_logger().info("Trigger received — next frame will run YOLO inference")
-        response.success = True
         return response
+
 
     def inference_loop(self):
         while rclpy.ok():
