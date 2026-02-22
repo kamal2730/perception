@@ -6,12 +6,18 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/bool.hpp>
 
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/ModelCoefficients.h>
+
 class PerceptionNode : public rclcpp::Node
 {
 public:
     PerceptionNode();
 
 private:
+    using PointT = pcl::PointXYZ;
+
     // Subscribers
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
@@ -21,14 +27,33 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_pointcloud_pub_;
     rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr debug_image_pub_;
 
-    // Timer for continuous publishing
+#ifdef PERCEPTION_DEBUG
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr voxel_debug_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr plane_debug_pub_;
+#endif
+
+    // Timer
     rclcpp::TimerBase::SharedPtr publish_timer_;
 
     // Stored snapshot
     sensor_msgs::msg::PointCloud2 stored_pointcloud_;
     sensor_msgs::msg::Image stored_image_;
 
+    // Incoming data
+    sensor_msgs::msg::PointCloud2 latest_pointcloud_;
+    sensor_msgs::msg::Image latest_image_;
+
     bool snapshot_available_;
+
+    // Plane coefficients (a,b,c,d)
+    pcl::ModelCoefficients::Ptr plane_coefficients_;
+
+    // Processing
+    void processPointCloud();
+    void voxelDownsample(const pcl::PointCloud<PointT>::Ptr& input,
+                         pcl::PointCloud<PointT>::Ptr& output);
+    void segmentPlane(const pcl::PointCloud<PointT>::Ptr& input,
+                      pcl::PointCloud<PointT>::Ptr& plane_cloud);
 
     // Callbacks
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);

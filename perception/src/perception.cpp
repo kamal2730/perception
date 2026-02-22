@@ -1,4 +1,11 @@
+#define PERCEPTION_DEBUG   // Comment this line to disable all debug topics
+
 #include "perception/perception.hpp"
+
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/filters/extract_indices.h>
 
 using std::placeholders::_1;
 
@@ -22,17 +29,31 @@ PerceptionNode::PerceptionNode()
         10,
         std::bind(&PerceptionNode::triggerCallback, this, _1));
 
-    // Publishers (fixed spelling)
-    debug_pointcloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-        "/perception/debug/pointcloud", 10);
+    // Existing debug publishers
+    debug_pointcloud_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/perception/debug/pointcloud", 10);
 
-    debug_image_pub_ = this->create_publisher<sensor_msgs::msg::Image>(
-        "/perception/debug/rgb_image", 10);
+    debug_image_pub_ =
+        this->create_publisher<sensor_msgs::msg::Image>(
+            "/perception/debug/rgb_image", 10);
 
-    // Timer to continuously publish stored data (10 Hz)
+#ifdef PERCEPTION_DEBUG
+    voxel_debug_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/perception/debug/voxel_cloud", 10);
+
+    plane_debug_pub_ =
+        this->create_publisher<sensor_msgs::msg::PointCloud2>(
+            "/perception/debug/plane_cloud", 10);
+#endif
+
+    // Timer 10Hz
     publish_timer_ = this->create_wall_timer(
         std::chrono::milliseconds(100),
         std::bind(&PerceptionNode::publishStoredData, this));
+
+    plane_coefficients_.reset(new pcl::ModelCoefficients);
 
     RCLCPP_INFO(this->get_logger(), "Perception node initialized");
 }
@@ -40,13 +61,13 @@ PerceptionNode::PerceptionNode()
 void PerceptionNode::pointCloudCallback(
     const sensor_msgs::msg::PointCloud2::SharedPtr msg)
 {
-    stored_pointcloud_ = *msg;   // store latest
+    latest_pointcloud_ = *msg;
 }
 
 void PerceptionNode::imageCallback(
     const sensor_msgs::msg::Image::SharedPtr msg)
 {
-    stored_image_ = *msg;   // store latest
+    latest_image_ = *msg;
 }
 
 void PerceptionNode::triggerCallback(
@@ -55,16 +76,21 @@ void PerceptionNode::triggerCallback(
     if (!msg->data)
         return;
 
-    if (stored_pointcloud_.data.empty() || stored_image_.data.empty())
+    if (latest_pointcloud_.data.empty() || latest_image_.data.empty())
     {
         RCLCPP_WARN(this->get_logger(), "No data received yet.");
         return;
     }
 
+    stored_pointcloud_ = latest_pointcloud_;
+    stored_image_ = latest_image_;
+
     snapshot_available_ = true;
 
+    processPointCloud();
+
     RCLCPP_INFO(this->get_logger(),
-                "Snapshot stored. Now continuously publishing.");
+                "Snapshot captured and processed.");
 }
 
 void PerceptionNode::publishStoredData()
@@ -74,6 +100,79 @@ void PerceptionNode::publishStoredData()
 
     debug_pointcloud_pub_->publish(stored_pointcloud_);
     debug_image_pub_->publish(stored_image_);
+}
+
+void PerceptionNode::processPointCloud()
+{
+    pcl::PointCloud<PointT>::Ptr input(new pcl::PointCloud<PointT>);
+    pcl::fromROSMsg(stored_pointcloud_, *input);
+
+    // -------- Voxel Downsample --------
+    pcl::PointCloud<PointT>::Ptr voxel_cloud(new pcl::PointCloud<PointT>);
+    voxelDownsample(input, voxel_cloud);
+
+#ifdef PERCEPTION_DEBUG
+    sensor_msgs::msg::PointCloud2 voxel_msg;
+    pcl::toROSMsg(*voxel_cloud, voxel_msg);
+    voxel_msg.header = stored_pointcloud_.header;
+    voxel_debug_pub_->publish(voxel_msg);
+#endif
+
+    // -------- Plane Segmentation --------
+    pcl::PointCloud<PointT>::Ptr plane_cloud(new pcl::PointCloud<PointT>);
+    segmentPlane(voxel_cloud, plane_cloud);
+
+#ifdef PERCEPTION_DEBUG
+    sensor_msgs::msg::PointCloud2 plane_msg;
+    pcl::toROSMsg(*plane_cloud, plane_msg);
+    plane_msg.header = stored_pointcloud_.header;
+    plane_debug_pub_->publish(plane_msg);
+#endif
+}
+
+void PerceptionNode::voxelDownsample(
+    const pcl::PointCloud<PointT>::Ptr& input,
+    pcl::PointCloud<PointT>::Ptr& output)
+{
+    pcl::VoxelGrid<PointT> vg;
+    vg.setInputCloud(input);
+    vg.setLeafSize(0.005f, 0.005f, 0.005f);   // 5mm voxel
+    vg.filter(*output);
+}
+
+void PerceptionNode::segmentPlane(
+    const pcl::PointCloud<PointT>::Ptr& input,
+    pcl::PointCloud<PointT>::Ptr& plane_cloud)
+{
+    pcl::SACSegmentation<PointT> seg;
+    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
+
+    seg.setOptimizeCoefficients(true);
+    seg.setModelType(pcl::SACMODEL_PLANE);
+    seg.setMethodType(pcl::SAC_RANSAC);
+    seg.setDistanceThreshold(0.01);
+    seg.setInputCloud(input);
+
+    seg.segment(*inliers, *plane_coefficients_);
+
+    if (inliers->indices.empty())
+    {
+        RCLCPP_WARN(this->get_logger(), "Plane segmentation failed.");
+        return;
+    }
+
+    pcl::ExtractIndices<PointT> extract;
+    extract.setInputCloud(input);
+    extract.setIndices(inliers);
+    extract.setNegative(false);
+    extract.filter(*plane_cloud);
+
+    RCLCPP_INFO(this->get_logger(),
+        "Plane equation: %.3f x + %.3f y + %.3f z + %.3f = 0",
+        plane_coefficients_->values[0],
+        plane_coefficients_->values[1],
+        plane_coefficients_->values[2],
+        plane_coefficients_->values[3]);
 }
 
 int main(int argc, char **argv)
