@@ -7,9 +7,10 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 
 add_executable(perception src/perception.cpp)
 target_include_directories(perception PUBLIC
@@ -17,8 +18,18 @@ target_include_directories(perception PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_compile_features(perception PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 
+ament_target_dependencies(perception
+  rclcpp
+  sensor_msgs
+  std_msgs
+)
+
 install(TARGETS perception
   DESTINATION lib/${PROJECT_NAME})
+
+  install(DIRECTORY include/
+  DESTINATION include/
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

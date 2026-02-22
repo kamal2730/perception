@@ -1,5 +1,5 @@
 ## TODO
-- [ ] Capture pointcloud and image
+- [x] Capture pointcloud and image
 - [ ] Process Depth Feed
 - [ ] Process Rgb Feed
 - [ ] Combine both
