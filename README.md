@@ -1,3 +1,10 @@
+## TODO
+- [ ] Capture pointcloud and image
+- [ ] Process Depth Feed
+- [ ] Process Rgb Feed
+- [ ] Combine both
+- [ ] convert into Action Server mode
+
 ```mermaid
 flowchart TB
     A[NEURAL MODE] --> B[RGBD]
