@@ -5,6 +5,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include "custom_interfaces/msg/rgb_detection.hpp"
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -22,6 +23,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
     rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr trigger_sub_;
+    rclcpp::Subscription<custom_interfaces::msg::RgbDetection>::SharedPtr rgb_detection_sub_;
 
     // Publishers
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr debug_pointcloud_pub_;
@@ -42,7 +44,9 @@ private:
     // Incoming data
     sensor_msgs::msg::PointCloud2 latest_pointcloud_;
     sensor_msgs::msg::Image latest_image_;
-
+    custom_interfaces::msg::RgbDetection latest_rgb_detection_;
+    
+    bool rgb_available_;
     bool snapshot_available_;
 
     // Plane coefficients (a,b,c,d)
@@ -59,6 +63,7 @@ private:
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
     void imageCallback(const sensor_msgs::msg::Image::SharedPtr msg);
     void triggerCallback(const std_msgs::msg::Bool::SharedPtr msg);
+    void rgbDetectionCallback(const custom_interfaces::msg::RgbDetection::SharedPtr msg);
     void publishStoredData();
 };
 

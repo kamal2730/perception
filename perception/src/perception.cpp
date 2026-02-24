@@ -11,6 +11,7 @@ using std::placeholders::_1;
 
 PerceptionNode::PerceptionNode()
     : Node("perception_node"),
+      rgb_available_(false),
       snapshot_available_(false)
 {
     // Subscribers
@@ -23,6 +24,11 @@ PerceptionNode::PerceptionNode()
         "/zed/zed_node/rgb/color/rect/image",
         10,
         std::bind(&PerceptionNode::imageCallback, this, _1));
+
+    rgb_detection_sub_ =this->create_subscription<custom_interfaces::msg::RgbDetection>(
+        "/rgb_detections",
+        10,
+        std::bind(&PerceptionNode::rgbDetectionCallback, this, _1));
 
     trigger_sub_ = this->create_subscription<std_msgs::msg::Bool>(
         "/perception/trigger",
@@ -70,6 +76,15 @@ void PerceptionNode::imageCallback(
     latest_image_ = *msg;
 }
 
+void PerceptionNode::rgbDetectionCallback(
+    const custom_interfaces::msg::RgbDetection::SharedPtr msg)
+{
+    latest_rgb_detection_ = *msg;
+    rgb_available_ = true;
+
+    //RCLCPP_INFO(this->get_logger(),"Received %ld RGB objects",msg->objects.size());
+}
+
 void PerceptionNode::triggerCallback(
     const std_msgs::msg::Bool::SharedPtr msg)
 {
@@ -104,6 +119,11 @@ void PerceptionNode::publishStoredData()
 
 void PerceptionNode::processPointCloud()
 {
+    if (!rgb_available_)
+    {
+        RCLCPP_WARN(this->get_logger(), "No RGB detections available.");
+        return;
+    }
     pcl::PointCloud<PointT>::Ptr input(new pcl::PointCloud<PointT>);
     pcl::fromROSMsg(stored_pointcloud_, *input);
 
@@ -128,6 +148,18 @@ void PerceptionNode::processPointCloud()
     plane_msg.header = stored_pointcloud_.header;
     plane_debug_pub_->publish(plane_msg);
 #endif
+
+    for (const auto & obj : latest_rgb_detection_.objects)
+    {
+        RCLCPP_INFO(this->get_logger(),
+            "Object: %s (%.2f) x=%.1f y=%.1f w=%.1f h=%.1f",
+            obj.name.c_str(),
+            obj.probability,
+            obj.x,
+            obj.y,
+            obj.width,
+            obj.height);
+    }
 }
 
 void PerceptionNode::voxelDownsample(

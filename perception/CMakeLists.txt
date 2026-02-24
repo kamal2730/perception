@@ -14,6 +14,7 @@ find_package(std_msgs REQUIRED)
 find_package(PCL REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(pcl_ros REQUIRED)
+find_package(custom_interfaces REQUIRED)
 
 
 add_executable(perception src/perception.cpp)
@@ -35,6 +36,7 @@ ament_target_dependencies(perception
   std_msgs
   pcl_conversions
   pcl_ros
+  custom_interfaces
 )
 
 install(TARGETS perception
