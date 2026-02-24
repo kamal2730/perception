@@ -1,7 +1,7 @@
 ## TODO
 - [x] Capture pointcloud and image
 - [x] Process Depth Feed
-- [ ] Process Rgb Feed
+- [x] Process Rgb Feed
 - [ ] Combine both
 - [ ] convert into Action Server mode
 

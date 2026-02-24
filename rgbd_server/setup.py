@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'rgbd = rgbd_server.rgbd:main'
+            'rgbd = rgbd_server.rgbd:main',
+            'dv = rgbd_server.dv:main'
         ],
     },
 )

@@ -52,3 +52,5 @@ CATKIN_IGNORE
 .DS_Store
 .idea/
 .vscode/
+
+obj_det/

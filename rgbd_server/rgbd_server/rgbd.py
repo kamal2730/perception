@@ -164,7 +164,7 @@ def main(args=None):
     node = RGBDServer(
         os.path.expanduser("/home/rm/kamal_ws/src/perception/best.pt"),
         imgsz=640,
-        visualize=True,
+        visualize=False,
         bbox_scale=1.5  # enlarge boxes by 20%
     )
     try:
