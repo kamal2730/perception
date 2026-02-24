@@ -6,6 +6,9 @@
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/filters/crop_box.h>
+#include <pcl/common/common.h>
+#include <cmath>
 
 using std::placeholders::_1;
 
@@ -151,14 +154,41 @@ void PerceptionNode::processPointCloud()
 
     for (const auto & obj : latest_rgb_detection_.objects)
     {
+        int x_min = static_cast<int>(obj.x);
+        int y_min = static_cast<int>(obj.y);
+        int width = static_cast<int>(obj.width);
+        int height = static_cast<int>(obj.height);
+
+        pcl::PointCloud<PointT>::Ptr cropped_cloud(new pcl::PointCloud<PointT>);
+
+        // Use organized cloud (IMPORTANT)
+        for (int v = y_min; v < y_min + height && v < static_cast<int>(stored_pointcloud_.height); v++)
+        {
+            if (v < 0) continue;
+            for (int u = x_min; u < x_min + width && u < static_cast<int>(stored_pointcloud_.width); u++)
+            {
+                if (u < 0) continue;
+                size_t idx = static_cast<size_t>(v) * stored_pointcloud_.width + u;
+                if (idx >= input->points.size()) continue;
+                const auto &pt = input->points[idx];
+                if (!std::isfinite(pt.x) || 
+                    !std::isfinite(pt.y) || 
+                    !std::isfinite(pt.z))
+                    continue;
+                cropped_cloud->points.push_back(pt);
+            }
+        }
+
+        if (cropped_cloud->empty())
+        {
+            RCLCPP_WARN(this->get_logger(), "Cropped cloud empty for object %s", obj.name.c_str());
+            continue;
+        }
+
         RCLCPP_INFO(this->get_logger(),
-            "Object: %s (%.2f) x=%.1f y=%.1f w=%.1f h=%.1f",
-            obj.name.c_str(),
-            obj.probability,
-            obj.x,
-            obj.y,
-            obj.width,
-            obj.height);
+            "Cropped %ld points for object %s",
+            cropped_cloud->points.size(),
+            obj.name.c_str());
     }
 }
 
